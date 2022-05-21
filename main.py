@@ -65,7 +65,7 @@ def getSINR(k):
 
 def start():
     for sample_id in range(1, N_sample):
-        sample = readSample(sample_id)  # 行：360个用户，4个小区，15条信道；列：64*4条信道
+        sample = readSample()  # 行：360个用户，4个小区，15条信道；列：64*4条信道
         village = []
         village.append([])  # 单小区频谱数
         village[0][0] = [0.5, 0, 0.4, 0.1]  # 频谱分配结果 {id:w}
