@@ -1,8 +1,6 @@
 import time
 
 import numpy as np
-import pandas as pd
-import parameter
 from parameter import *
 import os
 
@@ -12,6 +10,8 @@ import os
 
 
 readSize = 0
+
+
 def readSample(line_count=sample_n_row, file=input_file):
     global readSize
     fileSize = os.path.getsize(file)
@@ -24,31 +24,38 @@ def readSample(line_count=sample_n_row, file=input_file):
             readSize += len(line)
             offset += len(line)
             line_count -= 1
-            values = np.fromstring(line.decode().strip(), dtype=float, sep=' ')
-            sample.append(values.reshape(int(len(values) / 2), 2))
+            values = np.fromstring(line.decode().strip(), dtype=float, sep=' ').reshape(N_TX*N_cell, 2).T
+            combine = values[0] + 1j * values[1]
+            sample.append(combine)
             if line_count == 0:
                 break
     return np.array(sample)
 
+
 def readChannel(sample, rb_num=N_RB, cell_num=N_cell, ue_num=N_UE, tx_num=N_TX):
-    sample = np.array(sample)
-    h = sample.reshape((((rb_num, cell_num, ue_num, cell_num, 2*tx_num))))
+    # sample = np.array(sample)
+    h = sample.reshape((rb_num, cell_num, ue_num, cell_num, tx_num))
     return h
 
-def generateChMtx(): #生成样例的信道矩阵
+
+def generateChMtx():  # 生成样例的信道矩阵
     cur = time.time()
-    sample = readSample()
-    print("sample shape : " + str(sample.shape))
-    print("sample[0] shape : " + str(sample[0].shape))
-    h=readChannel(sample)
-    print(len(sample))
+    read_sample = readSample()
+    print("read_sample shape :" + str(read_sample.shape))
+    sample = readChannel(read_sample)  # 行：360个用户，4个小区，15条信道；列：64*4条信道
+    print("sample shape :" + str(sample.shape))
     end = time.time()
-    print("Time : " + str(end - cur))
-
-    #h_k_m_n = h[m][n][k][n]
-    #RB-Cell-UE-Cell
+    print("ReadTime : " + str(end - cur))
+    #   RB数：1 <= m <= 15    小区数：1 <= n <= 4  四个小区的所有RB， 用户数：1 <= k <= 90
+    #  h : 某个用户接收64个信道的信道系数，是个1*64的向量（也就是一个小区范围内），sample一行有4个小区的h
+    #  w ：信道分配给用户k的加权系数矢量 64 * 1
+    #  pk：用户功率值
+    # h_k_m_n = h[m][n][k][n]
+    # RB-Cell-UE-Cell
     # print(h[14][3][89][3])
-    return h
+    print(sample[0][0][0][1][0])
+    return sample
+
 
 # print(readSample(1))
 
@@ -72,9 +79,9 @@ def getSINR(phi, h):
     # print("矩阵无穷的范数")
     # print(np.linalg.norm(a, ord=np.inf))
 
-    SINR = [] #所有用户的SINR
-    for cell in range(1, N_cell):
-        for rb in range(1, N_RB):
+    SINR = []  # 所有用户的SINR 90个
+    for cell in range(0, N_cell):  # n
+        for rb in range(0, N_RB):  # m  # k 用户
             ues = phi[rb][cell]
             H_m_n = []
             for k in list(ues.keys()):
@@ -83,29 +90,31 @@ def getSINR(phi, h):
             H_m_n = np.array(H_m_n)
             H_m_n_H = np.transpose(np.conjugate(H_m_n))
             temp = np.linalg.inv(np.dot(H_m_n, H_m_n_H))
-            w_m_n = np.dot(H_m_n_H, temp) / (np.linalg.norm(np.dot(H_m_n_H, temp)))
+            w_m_n = np.dot(H_m_n_H, temp) / (np.linalg.norm(np.dot(H_m_n_H, temp)))  # 默认ord=fro
 
             for k, p_k in ues.items():
                 idx_k = list(ues.keys()).index(k)
-                #有用信号功率
-                CalcSignal = ((abs(np.dot(H_m_n[idx_k].reshape(1,128), np.transpose(w_m_n)[idx_k].reshape(128, 1)) * np.sqrt(p_k)))**2)[0][0]
-                #配对用户间干扰
+                # 有用信号功率
+                CalcSignal = ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
+                                          np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k))) ** 2)[0][0]
+                # 配对用户间干扰
                 CalcMuInterf = 0
                 for l, p_l in ues.items():
                     if l == k:
                         continue
                     else:
                         idx_l = list(ues.keys()).index(k)
-                        CalcMuInterf += ((abs(np.dot(H_m_n[idx_l].reshape(1,128), np.transpose(w_m_n)[idx_l].reshape(128, 1)) * np.sqrt(p_k)))**2)[0][0]
-                #邻小区同RB上所有配对用户的小区间干扰信号功率
+                        CalcMuInterf += ((abs(np.dot(H_m_n[idx_l].reshape(1, N_TX),
+                                                     np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_k))) ** 2)[0][0]
+                # 邻小区同RB上所有配对用户的小区间干扰信号功率
                 CalcCellInterf = 0
-                for cell_interf in range(1, N_cell):
+                for cell_interf in range(0, N_cell):
                     if cell_interf == cell:
                         continue
                     else:
                         ues_cell_interf = phi[rb][cell_interf]
                         H_m_n2 = []
-                        for k in list(ues_cell_interf.keys()):
+                        for k in list(ues_cell_interf.keys()):  # 用户标号是从哪里开始
                             h_k_m_n2 = h[rb][cell_interf][k][cell_interf]
                             H_m_n2.append(h_k_m_n2)
                         H_m_n2 = np.array(H_m_n2)
@@ -115,9 +124,9 @@ def getSINR(phi, h):
 
                         for l2, p_l2 in ues.items():
                             idx_l2 = list(ues_cell_interf.keys()).index(l2)
-                            CalcCellInterf += ((abs(np.dot(H_m_n2[idx_l2].reshape(1, 128),
-                                                     np.transpose(w_m_n2)[idx_l2].reshape(128, 1)) * np.sqrt(p_l2))) ** 2)[ 0][0]
-                #SINR
+                            CalcCellInterf += ((abs(np.dot(H_m_n2[idx_l2].reshape(1, N_TX),
+                                                             np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1)) * np.sqrt(p_l2))) ** 2)[0][0]
+                # SINR
                 CalcSinr = CalcSignal / (CalcMuInterf + CalcCellInterf + sigma)
                 SINR.append(CalcSinr)
 
@@ -126,33 +135,18 @@ def getSINR(phi, h):
 
 
 def start():
-    for sample_id in range(1, N_sample+1):
+    # sample[(cell-1)*90] ~ sample[cell*90-1]
+    for sample_id in range(1, N_sample + 1):
         h = generateChMtx()
 
-        phi = [] #最终分配结果矩阵,行表示RB,列表示Cell
-        for r in range (0, N_RB):
+        phi = []  # 最终分配结果矩阵, 行表示RB, 列表示Cell
+        for rb in range(0, N_RB):
             phi.append([])
-            for c in range(0, N_cell):
-                phi[r].append({1: 0.3, 2: 0.4, 3: 0.2, 10: 0.1})  # 频谱分配结果 {id:w}
+            for cell in range(0, N_cell):
+                phi[rb].append({1: 0.3, 2: 0.4, 3: 0.2, 10: 0.1})  # 频谱分配结果 {id:w}
 
         SINR = getSINR(phi, h)
-        print()
-
-
-    for sample_id in range(1, N_sample):
-        sample = readSample()  # 行：360个用户，4个小区，15条信道；列：64*4条信道
-        village = []
-        village.append([])  # 单小区频谱数
-        village[0][0] = [0.5, 0, 0.4, 0.1]  # 频谱分配结果 {id:w}
-        k, m, n = 1, 2, 3
-        #   RB数：1 <= m <= 15    小区数：1 <= n <= 4  四个小区的所有RB， 用户数：1 <= k <= 90
-        #  h : 某个用户接收64个信道的信道系数，是个1*64的向量（也就是一个小区范围内），sample一行有4个小区的h
-        #  w ：信道分配给用户k的加权系数矢量 64 * 1
-        #  pk：用户功率值
-        # sample[(cell-1)*90] ~ sample[cell*90-1]
-        h = village[n-1][m-1][k-1] = sample[0] # 1*64
-
-
+        print(len(SINR))
         break
 
 

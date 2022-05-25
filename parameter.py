@@ -1,4 +1,3 @@
-import numpy as np
 root_dir = "./"
 # 输出文件格式
 index = 0
