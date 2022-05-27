@@ -3,7 +3,7 @@ import time
 import numpy as np
 from parameter import *
 import os
-
+from balanceO import balanceO
 # input0 = np.genfromtxt("InputData0.csv", delimiter=" ", dtype=float)
 # input0 = np.array(np.loadtxt("InputData0.csv", dtype=str, delimiter=' ', usecols=1, encoding='utf-8'))
 # print(input0.shape)
@@ -140,7 +140,7 @@ def init():
     for rb in range(0, N_RB):
         phi.append([])
         for cell in range(0, N_cell):
-            phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1 / 6))  # 频谱分配结果 {id:w}
+            phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1/6))  # 频谱分配结果 {id:p}
 
     return phi
 
@@ -149,10 +149,16 @@ def start():
     for sample_id in range(1, N_sample + 1):
         h = generateChMtx()
 
-        phi = init()
+        phi = np.array(init())
 
         SINR = getSINR(phi, h)
-        print(len(SINR))
+        SINR_mtx = np.array(SINR).reshape(4,15,6)
+        print(SINR_mtx[0])
+        min = np.min(SINR_mtx[0])
+        print(min)
+
+        balanceO(phi[0], SINR_mtx[0],(15,6,0))
+
         break
 
 
