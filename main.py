@@ -133,17 +133,23 @@ def getSINR(phi, h):
         print()
     return SINR
 
+def init():
+
+    phi = []  # 最终分配结果矩阵, 行表示RB, 列表示Cell
+
+    for rb in range(0, N_RB):
+        phi.append([])
+        for cell in range(0, N_cell):
+            phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1 / 6))  # 频谱分配结果 {id:w}
+
+    return phi
 
 def start():
     # sample[(cell-1)*90] ~ sample[cell*90-1]
     for sample_id in range(1, N_sample + 1):
         h = generateChMtx()
 
-        phi = []  # 最终分配结果矩阵, 行表示RB, 列表示Cell
-        for rb in range(0, N_RB):
-            phi.append([])
-            for cell in range(0, N_cell):
-                phi[rb].append({1: 0.3, 2: 0.4, 3: 0.2, 10: 0.1})  # 频谱分配结果 {id:w}
+        phi = init()
 
         SINR = getSINR(phi, h)
         print(len(SINR))
