@@ -8,7 +8,7 @@ import time
 from generate_data import generate_int_data, generate_double_data
 
 
-def balanceO(phi, SINR_mtx, shape, diff_expected=0.001, max_exchange=1000000):
+def balanceO(phi, SINR_mtx, shape, cell, diff_expected=0.001, max_exchange=1000000):
     rows, cols, concav = shape
     total = SINR_mtx.sum(axis=1)
 
@@ -27,9 +27,9 @@ def balanceO(phi, SINR_mtx, shape, diff_expected=0.001, max_exchange=1000000):
         valid_col2 = cols - (row2 >= concav)  # 最小行有效数据个数
         diff_end = diff_begin
         for i in range(max_exchange):
-            col1 = np.random.randint(0, valid_col1)
-            col2 = np.min(SINR_mtx[row2])
-            phi[row1, col1], phi[row2, col2] = phi[row2, col2], phi[row1, col1]
+            col1 = np.argmax(SINR_mtx[row1])
+            col2 = np.argmin(SINR_mtx[row2])
+            phi[row1][cell][row1][col1], phi[row2][cell][row2][col2] = phi[row2][cell][row2][col2], phi[row1][cell][row1][col1]
 
             diff_end += (SINR_mtx[row1, col1] - SINR_mtx[row2, col2]) * 2
             if abs(diff_end) < diff_begin:
@@ -47,8 +47,10 @@ def balanceO(phi, SINR_mtx, shape, diff_expected=0.001, max_exchange=1000000):
             break
 
     print('最终极差为：', total.ptp())
-    low = min(SINR_mtx[:concav].min(), SINR_mtx[concav:, :-1].min())
-    high = max(SINR_mtx[:concav].max(), SINR_mtx[concav:, :-1].max())
+    low = SINR_mtx.min()
+    high = SINR_mtx.max()
+    # low = min(SINR_mtx[:concav].min(), SINR_mtx[concav:, :-1].min())
+    # high = max(SINR_mtx[:concav].max(), SINR_mtx[concav:, :-1].max())
     elapsed_time = time.time() - begin_time
     print(
         f'{rows}行{cols}列的矩阵，其元素在{low}和{high}之间,优化{epoch - 1}轮，累计交换{total_exchange}次，耗时{elapsed_time:.2f}秒,平均每毫秒交换{total_exchange / (elapsed_time * 1000):.0f}次')

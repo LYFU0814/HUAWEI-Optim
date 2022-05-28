@@ -70,61 +70,56 @@ def useful_signal_power(k):
 
 
 def getSINR(phi, h):
-    # a = np.array([[complex(1, -1), 3], [2, complex(1, 1)]])
-    # print(a)
-    # print("矩阵2的范数")
-    # print(np.linalg.norm(a, ord=2))  # 计算矩阵2的范数
-    # print("矩阵1的范数")
-    # print(np.linalg.norm(a, ord=1))  # 计算矩阵1的范数
-    # print("矩阵无穷的范数")
-    # print(np.linalg.norm(a, ord=np.inf))
 
     SINR = []  # 所有用户的SINR 90个
     for cell in range(0, N_cell):  # n
         for rb in range(0, N_RB):  # m  # k 用户
             ues = phi[rb][cell]
             H_m_n = []
-            for k in list(ues.keys()):
-                h_k_m_n = h[rb][cell][k][cell]
+            for j in range(0, N_layer):
+                k = phi[rb][cell][rb][j][0]
+                h_k_m_n = h[rb][cell][j][cell]
                 H_m_n.append(h_k_m_n)
             H_m_n = np.array(H_m_n)
             H_m_n_H = np.transpose(np.conjugate(H_m_n))
             temp = np.linalg.inv(np.dot(H_m_n, H_m_n_H))
             w_m_n = np.dot(H_m_n_H, temp) / (np.linalg.norm(np.dot(H_m_n_H, temp)))  # 默认ord=fro
 
-            for k, p_k in ues.items():
-                idx_k = list(ues.keys()).index(k)
+            for idx_k in range(0, N_layer):
+                k, p_k = phi[rb][cell][rb][idx_k][0], phi[rb][cell][rb][idx_k][1]
+                # idx_k = list(ues.keys()).index(k)
                 # 有用信号功率
                 CalcSignal = ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
                                           np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k))) ** 2)[0][0]
                 # 配对用户间干扰
                 CalcMuInterf = 0
-                for l, p_l in ues.items():
-                    if l == k:
+                for idx_l in range(0, N_layer):
+                    l, p_l = phi[rb][cell][rb][idx_l][0], phi[rb][cell][rb][idx_l][1]
+                    if idx_l == idx_k:
                         continue
                     else:
-                        idx_l = list(ues.keys()).index(k)
-                        CalcMuInterf += ((abs(np.dot(H_m_n[idx_l].reshape(1, N_TX),
-                                                     np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_k))) ** 2)[0][0]
+                        CalcMuInterf += ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
+                                                     np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_l))) ** 2)[0][0]
                 # 邻小区同RB上所有配对用户的小区间干扰信号功率
                 CalcCellInterf = 0
                 for cell_interf in range(0, N_cell):
                     if cell_interf == cell:
                         continue
                     else:
-                        ues_cell_interf = phi[rb][cell_interf]
+                        ues_cell_interf = phi[rb][cell_interf][rb]
                         H_m_n2 = []
-                        for k in list(ues_cell_interf.keys()):  # 用户标号是从哪里开始
-                            h_k_m_n2 = h[rb][cell_interf][k][cell_interf]
+                        for j in range(0, N_layer):  # 用户标号是从哪里开始
+                            k = ues_cell_interf[j][0]
+                            h_k_m_n2 = h[rb][cell_interf][j][cell_interf]
                             H_m_n2.append(h_k_m_n2)
                         H_m_n2 = np.array(H_m_n2)
                         H_m_n_H2 = np.transpose(np.conjugate(H_m_n2))
                         temp2 = np.linalg.inv(np.dot(H_m_n2, H_m_n_H2))
                         w_m_n2 = np.dot(H_m_n_H2, temp2) / (np.linalg.norm(np.dot(H_m_n_H2, temp2)))
 
-                        for l2, p_l2 in ues.items():
-                            idx_l2 = list(ues_cell_interf.keys()).index(l2)
-                            CalcCellInterf += ((abs(np.dot(H_m_n2[idx_l2].reshape(1, N_TX),
+                        for idx_l2 in range(0, N_layer):
+                            l2, p_l2 = ues_cell_interf[idx_l2][0], ues_cell_interf[idx_l2][1]
+                            CalcCellInterf += ((abs(np.dot(H_m_n2[idx_k].reshape(1, N_TX),
                                                              np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1)) * np.sqrt(p_l2))) ** 2)[0][0]
                 # SINR
                 CalcSinr = CalcSignal / (CalcMuInterf + CalcCellInterf + sigma)
@@ -134,14 +129,14 @@ def getSINR(phi, h):
     return SINR
 
 def init():
-
     phi = []  # 最终分配结果矩阵, 行表示RB, 列表示Cell
-
+    user = np.arange(0, N_UE * N_cell).reshape((N_cell, N_RB, 6))
     for rb in range(0, N_RB):
         phi.append([])
         for cell in range(0, N_cell):
-            phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1/6))  # 频谱分配结果 {id:p}
-
+            phi[rb].append([[(i, 1/6) for i in user[cell][rbi]] for rbi in range(0, N_RB)])  # 频谱分配结果 {id:p}
+            # phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1/6))  # 频谱分配结果 {id:p}
+            #
     return phi
 
 def start():
@@ -149,17 +144,15 @@ def start():
     for sample_id in range(1, N_sample + 1):
         h = generateChMtx()
 
-        phi = np.array(init())
-
+        phi = init()
         SINR = getSINR(phi, h)
-        SINR_mtx = np.array(SINR).reshape(4,15,6)
-        print(SINR_mtx[0])
-        min = np.min(SINR_mtx[0])
-        print(min)
-
-        balanceO(phi[0], SINR_mtx[0],(15,6,0))
-
+        for cell in range(0, N_cell):
+            SINR_mtx = np.array(SINR).reshape((4, 15, 6))
+            # print(SINR_mtx[0])
+            min = np.min(SINR_mtx[0])
+            print(min)
+            balanceO(phi, SINR_mtx[0], (15, 6, 0), cell)
+            break
         break
-
 
 start()
