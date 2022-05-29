@@ -32,6 +32,31 @@ def readSample(line_count=sample_n_row, file=input_file):
     return np.array(sample)
 
 
+def writeResult(result):
+    with open(OutputResultFileName, mode='a+', encoding='utf-8') as file:
+        for sample_id in N_sample:
+            phi = result[sample_id]
+            #  write 60 row
+            for cell in range(0, N_cell):
+                for rb in range(0, N_RB):
+                    res_str = ""
+                    for tup in phi[rb][cell][rb]:
+                        res_str += str(tup[0]) + " "
+                    res_str.strip()
+                    file.write(res_str + "\n")
+
+        for sample_id in N_sample:
+            phi = result[sample_id]
+            #  write 60 * 6 row
+            for cell in range(0, N_cell):
+                for rb in range(0, N_RB):
+                    res_str = ""
+                    for tup in phi[rb][cell][rb]:
+                        res_str += str(tup[1])
+                        res_str.strip()
+                        file.write(res_str + "\n")
+
+
 def readChannel(sample, rb_num=N_RB, cell_num=N_cell, ue_num=N_UE, tx_num=N_TX):
     # sample = np.array(sample)
     h = sample.reshape((rb_num, cell_num, ue_num, cell_num, tx_num))
@@ -153,13 +178,13 @@ def init():
 
 def start():
     # sample[(cell-1)*90] ~ sample[cell*90-1]
+    result = []  # 10 * phi
     for sample_id in range(1, N_sample + 1):
         h = generateChMtx()
 
         phi = init()
         SINR = getSINR(phi, h)
         SINR_mtx = np.array(SINR).reshape((4, 15, 6))
-
 
 
         for i in range(100):
@@ -196,4 +221,5 @@ def start():
            # break
         break
 
-start()
+    writeResult(None, None)
+# start()

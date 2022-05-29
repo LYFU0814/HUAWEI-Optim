@@ -35,9 +35,9 @@ def balanceO(phi, SINR_mtx, shape, cell, diff_expected=0.005, max_exchange=10000
         temp = total[row1] + total[row2]
         total[row1] = (temp + diff_end) / 2
         total[row2] = (temp - diff_end) / 2
-        if epoch % 1000 == 0 or i > 100000:
-            print(f'轮次：{epoch:<8}， 交换次数：{i + 1:<10}， 初始差距{diff_begin:<8}， 结束差距：{abs(diff_end):<8}')
-        total_exchange += i + 1
+        # if epoch % 1000 == 0 or i > 100000:
+        #     print(f'轮次：{epoch:<8}， 交换次数：{i + 1:<10}， 初始差距{diff_begin:<8}， 结束差距：{abs(diff_end):<8}')
+        # total_exchange += i + 1
         # break
     # else:
     #     total[[row1, row2]] = bak
