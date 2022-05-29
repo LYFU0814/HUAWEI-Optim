@@ -125,7 +125,7 @@ def getSINR(phi, h):
                 CalcSinr = CalcSignal / (CalcMuInterf + CalcCellInterf + sigma)
                 SINR.append(CalcSinr)
 
-        print()
+        # print()
     return SINR
 
 def init():
@@ -134,7 +134,19 @@ def init():
     for rb in range(0, N_RB):
         phi.append([])
         for cell in range(0, N_cell):
-            phi[rb].append([[(i, 1/6) for i in user[cell][rbi]] for rbi in range(0, N_RB)])  # 频谱分配结果 {id:p}
+            res = []
+            for rbi in range(0, N_RB):
+                resu = []
+                alc = [round(np.random.random(), 3) for i in range(0, 5)]
+                alc.append(0)
+                alc = sorted(alc)
+                alc.append(1)
+                for i in range(1, 7):
+                    resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1], 3)))
+                res.append(resu)
+            phi[rb].append(res)
+
+            # phi[rb].append([[(i, 0.166) for i in user[cell][rbi]] for rbi in range(0, N_RB)])  # 频谱分配结果 {id:p}
             # phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1/6))  # 频谱分配结果 {id:p}
             #
     return phi
@@ -146,13 +158,42 @@ def start():
 
         phi = init()
         SINR = getSINR(phi, h)
-        for cell in range(0, N_cell):
+        SINR_mtx = np.array(SINR).reshape((4, 15, 6))
+
+
+
+        for i in range(100):
+            for cell in range(0, N_cell):
+                # SINR_mtx = np.array(SINR).reshape((4, 15, 6))
+                # min = np.min(SINR_mtx[0][0])
+                # print(min)
+                balanceO(phi, SINR_mtx[0], (15, 6, 0), cell)
+                # SINR = getSINR(phi, h)
+                # print(phi[0][0][0])
+
+            for cell in range(0, N_cell):
+                for rb in range(0, N_RB):
+                    max_idx = np.argmax(SINR_mtx[cell][rb])
+                    min_idx = np.argmin(SINR_mtx[cell][rb])
+                    if max_idx == min_idx:
+                        min_idx = np.random.choice([i for i in range(0, N_layer) if i != max_idx])
+
+                    phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], round(phi[rb][cell][rb][min_idx][1] + 0.005, 3))
+                    phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], round(phi[rb][cell][rb][max_idx][1] - 0.005, 3))
+
+
+            # for i in range(15):
+            #     print(phi[i][0][i])
+
+            SINR = getSINR(phi, h)
             SINR_mtx = np.array(SINR).reshape((4, 15, 6))
-            # print(SINR_mtx[0])
-            min = np.min(SINR_mtx[0])
+
+            min = np.min(SINR_mtx[0][0])
             print(min)
-            balanceO(phi, SINR_mtx[0], (15, 6, 0), cell)
-            break
+
+        for i in range(15):
+            print(phi[i][0][i])
+           # break
         break
 
 start()
