@@ -33,8 +33,9 @@ def readSample(line_count=sample_n_row * N_sample, file=input_file):
 
 
 def writeResult(result):
-    with open(OutputResultFileName, mode='a+', encoding='utf-8') as file:
-        for sample_id in N_sample:
+    with open(OutputResultFileName, mode='w', encoding='utf-8') as file:
+        # file.truncate()
+        for sample_id in range(0, N_sample):
             phi = result[sample_id]
             #  write 60 row
             for cell in range(0, N_cell):
@@ -42,18 +43,18 @@ def writeResult(result):
                     res_str = ""
                     for tup in phi[rb][cell][rb]:
                         res_str += str(tup[0]) + " "
-                    res_str.strip()
+                    res_str = res_str.strip(" ")
                     file.write(res_str + "\n")
 
-        for sample_id in N_sample:
+        for sample_id in range(0, N_sample):
             phi = result[sample_id]
             #  write 60 * 6 row
             for cell in range(0, N_cell):
                 for rb in range(0, N_RB):
-                    res_str = ""
+                    # res_str = ""
                     for tup in phi[rb][cell][rb]:
-                        res_str += str(tup[1])
-                        res_str.strip()
+                        res_str = "" + str(tup[1])
+                        res_str = res_str.strip()
                         file.write(res_str + "\n")
 
 
@@ -63,9 +64,9 @@ def readChannel(sample, rb_num=N_RB, cell_num=N_cell, ue_num=N_UE, tx_num=N_TX):
     return h
 
 
-def generateChMtx(sample_id):  # 生成样例的信道矩阵
+def generateChMtx(sample_all, sample_id):  # 生成样例的信道矩阵
     cur = time.time()
-    read_sample = readSample()[(sample_id - 1) * sample_n_row: sample_id * sample_n_row]
+    read_sample = sample_all[(sample_id - 1) * sample_n_row: sample_id * sample_n_row]
     print("read_sample shape :" + str(read_sample.shape))
     sample = readChannel(read_sample)  # 行：360个用户，4个小区，15条信道；列：64*4条信道
     print("sample shape :" + str(sample.shape))
@@ -155,7 +156,7 @@ def getSINR(phi, h):
 
 def init():
     phi = []  # 最终分配结果矩阵, 行表示RB, 列表示Cell
-    user = np.arange(0, N_UE * N_cell).reshape((N_cell, N_RB, 6))
+    user = np.arange(1, N_UE * N_cell + 1).reshape((N_cell, N_RB, 6))
     for rb in range(0, N_RB):
         phi.append([])
         for cell in range(0, N_cell):
@@ -181,17 +182,17 @@ def balanceO(phi, SINR_mtx, cell):
     row1, row2 = total.argmax(), total.argmin()
     col1 = np.argmax(SINR_mtx[row1])
     col2 = np.argmin(SINR_mtx[row2])
-    phi[row1][cell][row1][col1], phi[row2][cell][row2][col2] = (phi[row2][cell][row2][col2][0],
-                                                                phi[row1][cell][row1][col1][1]), (
-                                                               phi[row1][cell][row1][col1][0],
-                                                               phi[row2][cell][row2][col2][1])
+    phi[row1][cell][row1][col1], phi[row2][cell][row2][col2] = (phi[row2][cell][row2][col2][0],phi[row1][cell][row1][col1][1]), \
+                                                               (phi[row1][cell][row1][col1][0],phi[row2][cell][row2][col2][1])
 
 
 def start():
+    beg = time.time()
     # sample[(cell-1)*90] ~ sample[cell*90-1]
     result = []  # 10 * phi
-    for sample_id in range(5, N_sample + 1):
-        h = generateChMtx(sample_id)
+    sample_all = readSample()
+    for sample_id in range(1, N_sample + 1):
+        h = generateChMtx(sample_all, sample_id)
 
         phi = init()
         SINR = getSINR(phi, h)
@@ -214,25 +215,23 @@ def start():
                     if max_idx == min_idx:
                         min_idx = np.random.choice([i for i in range(0, N_layer) if i != max_idx])
 
-                    phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], round(phi[rb][cell][rb][min_idx][1] + 0.005, 3))
-                    phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], round(phi[rb][cell][rb][max_idx][1] - 0.005, 3))
-
-
-            # for i in range(15):
-            #     print(phi[i][0][i])
+                    if phi[rb][cell][rb][max_idx][1] - 0.005 > 0:
+                        phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], round(phi[rb][cell][rb][min_idx][1] + 0.005, 3))
+                        phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], round(phi[rb][cell][rb][max_idx][1] - 0.005, 3))
 
             SINR = getSINR(phi, h)
             SINR_mtx = np.array(SINR).reshape((4, 15, 6))
 
             min = np.min(SINR_mtx[0][0])
             print(min)
-            # print(phi[0][0][0])
 
         for i in range(15):
             print(phi[i][0][i])
-           # break
-        break
+        # break
 
-    writeResult(None, None)
+        result.append(phi)
 
+    writeResult(result)
+    end = time.time()
+    print("total time: " ,end - beg)
 start()
