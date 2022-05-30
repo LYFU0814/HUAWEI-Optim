@@ -100,19 +100,20 @@ def getSINR(phi, h):
     SINR = []  # 所有用户的SINR 90个
     for cell in range(0, N_cell):  # n
         for rb in range(0, N_RB):  # m  # k 用户
-            ues = phi[rb][cell]
+            phi_m_n = phi[rb][cell][rb]
             H_m_n = []
-            for j in range(0, N_layer):
-                k = phi[rb][cell][rb][j][0]
-                h_k_m_n = h[rb][cell][j][cell]
+            for j in range(0, len(phi_m_n)):
+                k = int(phi_m_n[j][0] - cell * N_UE) - 1
+                h_k_m_n = h[rb][cell][k][cell]
                 H_m_n.append(h_k_m_n)
             H_m_n = np.array(H_m_n)
             H_m_n_H = np.transpose(np.conjugate(H_m_n))
             temp = np.linalg.inv(np.dot(H_m_n, H_m_n_H))
-            w_m_n = np.dot(H_m_n_H, temp) / (np.linalg.norm(np.dot(H_m_n_H, temp)))  # 默认ord=fro
+            numerator = np.dot(H_m_n_H, temp)
+            w_m_n = numerator / np.linalg.norm(numerator)  # 默认ord=fro
 
-            for idx_k in range(0, N_layer):
-                k, p_k = phi[rb][cell][rb][idx_k][0], phi[rb][cell][rb][idx_k][1]
+            for idx_k in range(0, len(phi_m_n)):
+                k, p_k = phi_m_n[idx_k][0], phi_m_n[idx_k][1]
                 # idx_k = list(ues.keys()).index(k)
                 # 有用信号功率
                 CalcSignal = ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
@@ -197,7 +198,6 @@ def start():
         phi = init()
         SINR = getSINR(phi, h)
         SINR_mtx = np.array(SINR).reshape((4, 15, 6))
-
 
         for i in range(100):
             for cell in range(0, N_cell):
