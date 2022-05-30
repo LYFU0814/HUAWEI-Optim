@@ -118,6 +118,9 @@ def getSINR(phi, h):
                 # 有用信号功率
                 CalcSignal = ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
                                           np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k))) ** 2)[0][0]
+                # CalcSignal = np.linalg.norm((np.dot(H_m_n[idx_k].reshape(1, N_TX),
+                #                           np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k)), 2)
+
                 # 配对用户间干扰
                 CalcMuInterf = 0
                 for idx_l in range(0, N_layer):
@@ -127,6 +130,9 @@ def getSINR(phi, h):
                     else:
                         CalcMuInterf += ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
                                                      np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_l))) ** 2)[0][0]
+                        # CalcMuInterf += np.linalg.norm((np.dot(H_m_n[idx_k].reshape(1, N_TX),
+                        #                              np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_l)), 2)
+
                 # 邻小区同RB上所有配对用户的小区间干扰信号功率
                 CalcCellInterf = 0
                 for cell_interf in range(0, N_cell):
@@ -136,8 +142,9 @@ def getSINR(phi, h):
                         ues_cell_interf = phi[rb][cell_interf][rb]
                         H_m_n2 = []
                         for j in range(0, N_layer):  # 用户标号是从哪里开始
-                            k = ues_cell_interf[j][0]
-                            h_k_m_n2 = h[rb][cell_interf][j][cell_interf]
+                            # k = ues_cell_interf[j][0]
+                            k2 = int(ues_cell_interf[j][0] - cell_interf * N_UE) - 1
+                            h_k_m_n2 = h[rb][cell_interf][k2][cell_interf]
                             H_m_n2.append(h_k_m_n2)
                         H_m_n2 = np.array(H_m_n2)
                         H_m_n_H2 = np.transpose(np.conjugate(H_m_n2))
@@ -146,8 +153,10 @@ def getSINR(phi, h):
 
                         for idx_l2 in range(0, N_layer):
                             l2, p_l2 = ues_cell_interf[idx_l2][0], ues_cell_interf[idx_l2][1]
-                            CalcCellInterf += ((abs(np.dot(H_m_n2[idx_k].reshape(1, N_TX),
-                                                             np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1)) * np.sqrt(p_l2))) ** 2)[0][0]
+                            # CalcCellInterf += ((abs(np.dot(H_m_n2[idx_k].reshape(1, N_TX),
+                            #                                  np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1)) * np.sqrt(p_l2))) ** 2)[0][0]
+                            CalcCellInterf += np.linalg.norm((np.dot(H_m_n2[idx_k].reshape(1, N_TX),
+                                                             np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1)) * np.sqrt(p_l2)), 2)
                 # SINR
                 CalcSinr = CalcSignal / (CalcMuInterf + CalcCellInterf + sigma)
                 SINR.append(CalcSinr)
