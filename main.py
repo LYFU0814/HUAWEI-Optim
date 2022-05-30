@@ -3,7 +3,7 @@ import time
 import numpy as np
 from parameter import *
 import os
-from balanceO import balanceO
+# from balanceO import balanceO
 # input0 = np.genfromtxt("InputData0.csv", delimiter=" ", dtype=float)
 # input0 = np.array(np.loadtxt("InputData0.csv", dtype=str, delimiter=' ', usecols=1, encoding='utf-8'))
 # print(input0.shape)
@@ -12,7 +12,7 @@ from balanceO import balanceO
 readSize = 0
 
 
-def readSample(line_count=sample_n_row, file=input_file):
+def readSample(line_count=sample_n_row * N_sample, file=input_file):
     global readSize
     fileSize = os.path.getsize(file)
     sample = []
@@ -63,9 +63,9 @@ def readChannel(sample, rb_num=N_RB, cell_num=N_cell, ue_num=N_UE, tx_num=N_TX):
     return h
 
 
-def generateChMtx():  # 生成样例的信道矩阵
+def generateChMtx(sample_id):  # 生成样例的信道矩阵
     cur = time.time()
-    read_sample = readSample()
+    read_sample = readSample()[(sample_id - 1) * sample_n_row: sample_id * sample_n_row]
     print("read_sample shape :" + str(read_sample.shape))
     sample = readChannel(read_sample)  # 行：360个用户，4个小区，15条信道；列：64*4条信道
     print("sample shape :" + str(sample.shape))
@@ -176,11 +176,22 @@ def init():
             #
     return phi
 
+def balanceO(phi, SINR_mtx, cell):
+    total = SINR_mtx.sum(axis=1)
+    row1, row2 = total.argmax(), total.argmin()
+    col1 = np.argmax(SINR_mtx[row1])
+    col2 = np.argmin(SINR_mtx[row2])
+    phi[row1][cell][row1][col1], phi[row2][cell][row2][col2] = (phi[row2][cell][row2][col2][0],
+                                                                phi[row1][cell][row1][col1][1]), (
+                                                               phi[row1][cell][row1][col1][0],
+                                                               phi[row2][cell][row2][col2][1])
+
+
 def start():
     # sample[(cell-1)*90] ~ sample[cell*90-1]
     result = []  # 10 * phi
-    for sample_id in range(1, N_sample + 1):
-        h = generateChMtx()
+    for sample_id in range(5, N_sample + 1):
+        h = generateChMtx(sample_id)
 
         phi = init()
         SINR = getSINR(phi, h)
@@ -192,7 +203,7 @@ def start():
                 # SINR_mtx = np.array(SINR).reshape((4, 15, 6))
                 # min = np.min(SINR_mtx[0][0])
                 # print(min)
-                balanceO(phi, SINR_mtx[0], (15, 6, 0), cell)
+                balanceO(phi, SINR_mtx[0], cell)
                 # SINR = getSINR(phi, h)
                 # print(phi[0][0][0])
 
@@ -215,6 +226,7 @@ def start():
 
             min = np.min(SINR_mtx[0][0])
             print(min)
+            # print(phi[0][0][0])
 
         for i in range(15):
             print(phi[i][0][i])
@@ -222,4 +234,5 @@ def start():
         break
 
     writeResult(None, None)
-# start()
+
+start()

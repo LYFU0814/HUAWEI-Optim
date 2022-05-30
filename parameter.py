@@ -8,7 +8,7 @@ OutputResultFileName = root_dir + "Result_{}_{}.csv".format(index, RealTeamID)
 # 输入文件格式
 input_file = root_dir + "InputData{}.csv".format(index)
 scenario_file = root_dir + "ScenarioData{}.csv".format(index)
-param = np.array(np.loadtxt(scenario_file, dtype=int, usecols=0, encoding='utf-8'))
+param = np.array(np.loadtxt(scenario_file, dtype=int, usecols=0))
 # 训练参数
 N_sample = param[6]  # 样例数, default: 10
 N_cell = param[0]  # 小区个数 / 样例, default: 4
