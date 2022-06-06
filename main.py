@@ -1,6 +1,8 @@
 import time
 
+# import numpy as np
 import numpy as np
+
 from parameter import *
 import os
 # from balanceO import balanceO
@@ -11,6 +13,12 @@ import os
 
 readSize = 0
 
+def my_dot(arrA, arrB, bit=32):
+    for i in range(0, arrA.shape[0]):
+        arrA[i] = np.round(arrA[i].real, bit) + 1j*np.round(arrA[i].imag, bit)
+    for i in range(0, arrB.shape[0]):
+        arrB[i] = np.round(arrB[i].real, bit) + 1j*np.round(arrB[i].imag, bit)
+    return np.dot(np.array(arrA), np.array(arrB))
 
 def readSample(line_count=sample_n_row * N_sample, file=input_file):
     global readSize
@@ -61,6 +69,7 @@ def writeResult(result):
 def readChannel(sample, rb_num=N_RB, cell_num=N_cell, ue_num=N_UE, tx_num=N_TX):
     # sample = np.array(sample)
     h = sample.reshape((rb_num, cell_num, ue_num, cell_num, tx_num))
+
     return h
 
 
@@ -108,28 +117,30 @@ def getSINR(phi, h):
                 H_m_n.append(h_k_m_n)
             H_m_n = np.array(H_m_n)
             H_m_n_H = np.transpose(np.conjugate(H_m_n))
-            temp = np.linalg.inv(np.dot(H_m_n, H_m_n_H))
-            numerator = np.dot(H_m_n_H, temp)
+            temp = np.linalg.pinv(np.matmul(H_m_n, H_m_n_H))
+            numerator = np.matmul(H_m_n_H, temp)
             w_m_n = numerator / np.linalg.norm(numerator)  # 默认ord=fro
 
             for idx_k in range(0, len(phi_m_n)):
                 k, p_k = phi_m_n[idx_k][0], phi_m_n[idx_k][1]
                 # idx_k = list(ues.keys()).index(k)
                 # 有用信号功率
-                CalcSignal = ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
+                CalcSignal = ((abs(np.matmul(H_m_n[idx_k].reshape(1, N_TX),
                                           np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k))) ** 2)[0][0]
                 # CalcSignal = np.linalg.norm((np.dot(H_m_n[idx_k].reshape(1, N_TX),
                 #                           np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k)), 2)
 
                 # 配对用户间干扰
                 CalcMuInterf = 0
-                for idx_l in range(0, N_layer):
+                for idx_l in range(0, len(phi_m_n)):
                     l, p_l = phi[rb][cell][rb][idx_l][0], phi[rb][cell][rb][idx_l][1]
                     if idx_l == idx_k:
                         continue
                     else:
-                        CalcMuInterf += ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
-                                                     np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_l))) ** 2)[0][0]
+                        # tmph = H_m_n[idx_k]
+                        # tmp_weight2 = np.transpose(w_m_n)[idx_l]
+                        CalcMuInterf += ((abs(my_dot(H_m_n[idx_k].reshape(1, N_TX),
+                                                     np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_l)))** 2)[0][0]
                         # CalcMuInterf += np.linalg.norm((np.dot(H_m_n[idx_k].reshape(1, N_TX),
                         #                              np.transpose(w_m_n)[idx_l].reshape(N_TX, 1)) * np.sqrt(p_l)), 2)
 
@@ -140,23 +151,28 @@ def getSINR(phi, h):
                         continue
                     else:
                         ues_cell_interf = phi[rb][cell_interf][rb]
-                        H_m_n2 = []
-                        for j in range(0, N_layer):  # 用户标号是从哪里开始
+                        H_m_n2_w = []
+                        H_m_n2_h = []
+                        for j2 in range(0, len(phi_m_n)):  # 用户标号是从哪里开始
                             # k = ues_cell_interf[j][0]
-                            k2 = int(ues_cell_interf[j][0] - cell_interf * N_UE) - 1
+                            k2 = int(ues_cell_interf[j2][0] - cell_interf * N_UE) - 1
                             h_k_m_n2 = h[rb][cell_interf][k2][cell_interf]
-                            H_m_n2.append(h_k_m_n2)
-                        H_m_n2 = np.array(H_m_n2)
-                        H_m_n_H2 = np.transpose(np.conjugate(H_m_n2))
-                        temp2 = np.linalg.inv(np.dot(H_m_n2, H_m_n_H2))
-                        w_m_n2 = np.dot(H_m_n_H2, temp2) / (np.linalg.norm(np.dot(H_m_n_H2, temp2)))
+                            h_k_m_n2_h = h[rb][cell][k2][cell_interf]
+                            H_m_n2_w.append(h_k_m_n2)
+                            H_m_n2_h.append(h_k_m_n2_h)
+                        H_m_n2_w = np.array(H_m_n2_w)
+                        H_m_n2_h = np.array(H_m_n2_h)
+                        H_m_n_H2_w = np.transpose(np.conjugate(H_m_n2_w))
+                        temp2 = np.linalg.inv(np.dot(H_m_n2_w, H_m_n_H2_w))
+                        w_m_n2 = np.dot(H_m_n_H2_w, temp2) / (np.linalg.norm(np.dot(H_m_n_H2_w, temp2)))
 
                         for idx_l2 in range(0, N_layer):
                             l2, p_l2 = ues_cell_interf[idx_l2][0], ues_cell_interf[idx_l2][1]
                             # CalcCellInterf += ((abs(np.dot(H_m_n2[idx_k].reshape(1, N_TX),
                             #                                  np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1)) * np.sqrt(p_l2))) ** 2)[0][0]
-                            CalcCellInterf += np.linalg.norm((np.dot(H_m_n2[idx_k].reshape(1, N_TX),
-                                                             np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1)) * np.sqrt(p_l2)), 2)
+                            CalcCellInterf += (np.linalg.norm((np.dot((H_m_n2_h[idx_k].reshape(1, N_TX)),
+                                                             (np.transpose(w_m_n2)[idx_l2].reshape(N_TX, 1))) * np.sqrt(p_l2)), 2))**2
+                            # print()
                 # SINR
                 CalcSinr = CalcSignal / (CalcMuInterf + CalcCellInterf + sigma)
                 SINR.append(CalcSinr)
@@ -173,12 +189,14 @@ def init():
             res = []
             for rbi in range(0, N_RB):
                 resu = []
-                alc = [round(np.random.random(), 3) for i in range(0, 5)]
+                # alc = [round(((1 - 0.005) * np.random.random() + 0.005), 3) for i in range(0, 5)] #random.random()生成[0,1)区间
+                alc = [((1 - 0.005) * np.random.random() + 0.005) for i in range(0, 5)] #random.random()生成[0,1)区间
                 alc.append(0)
                 alc = sorted(alc)
                 alc.append(1)
                 for i in range(1, 7):
-                    resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1], 3)))
+                    resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1] + 0.001, 3)))
+                    # resu.append((user[cell][rbi][i-1],1/6))
                 res.append(resu)
             phi[rb].append(res)
 
@@ -190,6 +208,8 @@ def init():
 def balanceO(phi, SINR_mtx, cell):
     total = SINR_mtx.sum(axis=1)
     row1, row2 = total.argmax(), total.argmin()
+    # row1 = total.argmin()  # rb
+    # row2 = np.array([total[i] for i in range(0, len(total)) if i != row1]).argmin()  # rb
     col1 = np.argmax(SINR_mtx[row1])
     col2 = np.argmin(SINR_mtx[row2])
     phi[row1][cell][row1][col1], phi[row2][cell][row2][col2] = (phi[row2][cell][row2][col2][0],phi[row1][cell][row1][col1][1]), \
@@ -208,12 +228,12 @@ def start():
         SINR = getSINR(phi, h)
         SINR_mtx = np.array(SINR).reshape((4, 15, 6))
 
-        for i in range(100):
+        for i in range(20):
             for cell in range(0, N_cell):
                 # SINR_mtx = np.array(SINR).reshape((4, 15, 6))
                 # min = np.min(SINR_mtx[0][0])
                 # print(min)
-                balanceO(phi, SINR_mtx[0], cell)
+                balanceO(phi, SINR_mtx[cell], cell)
                 # SINR = getSINR(phi, h)
                 # print(phi[0][0][0])
 
@@ -224,14 +244,17 @@ def start():
                     if max_idx == min_idx:
                         min_idx = np.random.choice([i for i in range(0, N_layer) if i != max_idx])
 
-                    if phi[rb][cell][rb][max_idx][1] - 0.005 > 0:
-                        phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], round(phi[rb][cell][rb][min_idx][1] + 0.005, 3))
-                        phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], round(phi[rb][cell][rb][max_idx][1] - 0.005, 3))
+                    if phi[rb][cell][rb][max_idx][1] - 0.02 > 0:
+                        # phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], round(phi[rb][cell][rb][min_idx][1] + 0.01, 3))
+                        # phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], round(phi[rb][cell][rb][max_idx][1] - 0.01, 3))
+                        phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], phi[rb][cell][rb][min_idx][1] + 0.01)
+                        phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], phi[rb][cell][rb][max_idx][1] - 0.01)
+
 
             SINR = getSINR(phi, h)
             SINR_mtx = np.array(SINR).reshape((4, 15, 6))
 
-            min = np.min(SINR_mtx[0][0])
+            min = np.min(SINR_mtx)
             print(min)
 
         for i in range(15):
