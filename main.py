@@ -2,6 +2,8 @@ import time
 
 # import numpy as np
 import numpy as np
+from numpy import transpose, dot, squeeze, conjugate, sqrt
+from numpy.linalg import pinv, norm
 
 from parameter import *
 import os
@@ -49,7 +51,7 @@ def writeResult(result):
             for cell in range(0, N_cell):
                 for rb in range(0, N_RB):
                     res_str = ""
-                    for tup in phi[rb][cell][rb]:
+                    for tup in phi[cell][rb]:
                         res_str += str(tup[0]) + " "
                     res_str = res_str.strip(" ")
                     file.write(res_str + "\n")
@@ -60,16 +62,14 @@ def writeResult(result):
             for cell in range(0, N_cell):
                 for rb in range(0, N_RB):
                     # res_str = ""
-                    for tup in phi[rb][cell][rb]:
+                    for tup in phi[cell][rb]:
                         res_str = "" + str(tup[1])
                         res_str = res_str.strip()
                         file.write(res_str + "\n")
 
 
 def readChannel(sample, rb_num=N_RB, cell_num=N_cell, ue_num=N_UE, tx_num=N_TX):
-    # sample = np.array(sample)
-    h = sample.reshape((rb_num, cell_num, ue_num, cell_num, tx_num))
-
+    h = sample.reshape((rb_num, ue_num * cell_num, cell_num, tx_num))
     return h
 
 
@@ -88,7 +88,7 @@ def generateChMtx(sample_all, sample_id):  # 生成样例的信道矩阵
     # h_k_m_n = h[m][n][k][n]
     # RB-Cell-UE-Cell
     # print(h[14][3][89][3])
-    print(sample[0][0][0][1][0])
+    # print(sample[0][0][0][1][0])
     return sample
 
 
@@ -104,7 +104,54 @@ def useful_signal_power(k):
     pass
 
 
-def getSINR(phi, h):
+def getSINR(UePairResult, InputH): # rb cell rb 15 * 4 * 15
+    CalcWeightSet = np.empty((N_cell, N_RB, N_TX, N_layer), dtype=complex)
+    for CellIdx in range(0, N_cell):
+        for RbIdx in range(0, N_RB):
+            MuH = []
+            UePairSet = UePairResult[CellIdx][RbIdx]
+            for UeIdx in range(0, len(UePairSet)):
+                UeID = UePairSet[UeIdx][0] - 1
+                TmpH = transpose(squeeze(InputH[RbIdx][UeID][CellIdx]))
+                MuH.append(TmpH)
+            MuH = np.array(MuH)
+            TmpMatrix = dot(transpose(conjugate(MuH)), pinv(dot(MuH, transpose(conjugate(MuH)))))
+            CalcWeightSet[CellIdx][RbIdx] = TmpMatrix / norm(TmpMatrix) #  4 * 15 * 64 * 6
+
+    AllUeSinrSet = np.empty((N_cell * N_UE, 1), dtype=float)
+    for CellIdx in range(0, N_cell):
+        for RbIdx in range(0, N_RB):
+            UePairSet = UePairResult[CellIdx][RbIdx]
+            for UeIdx in range(0, len(UePairSet)):
+                UeID = UePairSet[UeIdx][0] - 1
+                TmpH = transpose(squeeze(InputH[RbIdx][UeID][CellIdx]))
+                TmpWeight = CalcWeightSet[CellIdx][RbIdx][:, UeIdx]
+                CalcSignal = (abs(dot(TmpH, TmpWeight) * sqrt(UePairSet[UeIdx][1]))) ** 2
+                CalcMuInterf = 0
+                for UeIdx2 in range(0, len(UePairSet)):
+                    if UeIdx == UeIdx2:
+                        continue
+                    UeID2 = UePairSet[UeIdx2][0] - 1
+                    TmpWeight2 = CalcWeightSet[CellIdx][RbIdx][:, UeIdx2]
+                    CalcMuInterf += (abs(dot(TmpH.reshape(1, N_TX), TmpWeight2.reshape(N_TX, 1)) * sqrt(UePairSet[UeIdx2][1]))) ** 2
+
+                CalcCellInterf = 0
+                for CellIdx2 in range(0, N_cell):
+                    if CellIdx == CellIdx2:
+                        continue
+                    UePairSet2 = UePairResult[CellIdx2][RbIdx]
+                    for UeIdx3 in range(0, len(UePairSet2)):
+                        UeID3 = UePairSet2[UeIdx3][0] - 1
+                        # TmpH2 = transpose(squeeze(InputH[RbIdx][UeID][CellIdx2]))) [CellIdx][RbIdx][UeID][CellIdx]
+                        TmpH2 = transpose(squeeze(InputH[RbIdx][UeID][CellIdx2]))
+                        TmpWeight3 = CalcWeightSet[CellIdx2][RbIdx][:, UeIdx3]
+                        CalcCellInterf += (norm(dot(TmpH2.reshape(1, N_TX), TmpWeight3.reshape(N_TX, 1)) * sqrt(UePairSet[UeIdx3][1]), 2)) ** 2
+                CalcSinr = CalcSignal / (CalcMuInterf + CalcCellInterf + sigma)
+                AllUeSinrSet[UeID] = CalcSinr
+    return AllUeSinrSet
+
+
+def getSINR2(phi, h):
 
     SINR = []  # 所有用户的SINR 90个
     for cell in range(0, N_cell):  # n
@@ -117,15 +164,15 @@ def getSINR(phi, h):
                 H_m_n.append(h_k_m_n)
             H_m_n = np.array(H_m_n)
             H_m_n_H = np.transpose(np.conjugate(H_m_n))
-            temp = np.linalg.pinv(np.matmul(H_m_n, H_m_n_H))
-            numerator = np.matmul(H_m_n_H, temp)
+            temp = np.linalg.pinv(np.dot(H_m_n, H_m_n_H))
+            numerator = np.dot(H_m_n_H, temp)
             w_m_n = numerator / np.linalg.norm(numerator)  # 默认ord=fro
 
             for idx_k in range(0, len(phi_m_n)):
                 k, p_k = phi_m_n[idx_k][0], phi_m_n[idx_k][1]
                 # idx_k = list(ues.keys()).index(k)
                 # 有用信号功率
-                CalcSignal = ((abs(np.matmul(H_m_n[idx_k].reshape(1, N_TX),
+                CalcSignal = ((abs(np.dot(H_m_n[idx_k].reshape(1, N_TX),
                                           np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k))) ** 2)[0][0]
                 # CalcSignal = np.linalg.norm((np.dot(H_m_n[idx_k].reshape(1, N_TX),
                 #                           np.transpose(w_m_n)[idx_k].reshape(N_TX, 1)) * np.sqrt(p_k)), 2)
@@ -183,28 +230,45 @@ def getSINR(phi, h):
 def init():
     phi = []  # 最终分配结果矩阵, 行表示RB, 列表示Cell
     user = np.arange(1, N_UE * N_cell + 1).reshape((N_cell, N_RB, 6))
-    for rb in range(0, N_RB):
+    for cell in range(0, N_cell): # 4
         phi.append([])
-        for cell in range(0, N_cell):
-            res = []
-            for rbi in range(0, N_RB):
-                resu = []
-                # alc = [round(((1 - 0.005) * np.random.random() + 0.005), 3) for i in range(0, 5)] #random.random()生成[0,1)区间
-                alc = [((1 - 0.005) * np.random.random() + 0.005) for i in range(0, 5)] #random.random()生成[0,1)区间
-                alc.append(0)
-                alc = sorted(alc)
-                alc.append(1)
-                for i in range(1, 7):
-                    resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1] + 0.001, 3)))
-                    # resu.append((user[cell][rbi][i-1],1/6))
-                res.append(resu)
-            phi[rb].append(res)
+        for rb in range(0, N_RB):  # 15
+            phi[cell].append([])
+            resu = []
+            # alc = [round(((1 - 0.005) * np.random.random() + 0.005), 3) for i in range(0, 5)] #random.random()生成[0,1)区间
+            alc = [((1 - 0.005) * np.random.random() + 0.005) for i in range(0, 5)]  # random.random()生成[0,1)区间
+            alc.append(0)
+            alc = sorted(alc)
+            alc.append(1)
+            for i in range(1, 7):
+                # resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1] + 0.001, 3)))
+                resu.append((user[cell][rb][i - 1], round(1 / 6, 4)))
 
-            # phi[rb].append([[(i, 0.166) for i in user[cell][rbi]] for rbi in range(0, N_RB)])  # 频谱分配结果 {id:p}
-            # phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1/6))  # 频谱分配结果 {id:p}
-            #
+            phi[cell][rb] = resu
+
+    # for rb in range(0, N_RB):
+    #     phi.append([])
+    #     for cell in range(0, N_cell):
+    #         res = []
+    #         for rbi in range(0, N_RB):
+    #             resu = []
+    #             # alc = [round(((1 - 0.005) * np.random.random() + 0.005), 3) for i in range(0, 5)] #random.random()生成[0,1)区间
+    #             alc = [((1 - 0.005) * np.random.random() + 0.005) for i in range(0, 5)]  # random.random()生成[0,1)区间
+    #             alc.append(0)
+    #             alc = sorted(alc)
+    #             alc.append(1)
+    #             for i in range(1, 7):
+    #                 # resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1] + 0.001, 3)))
+    #                 resu.append((user[cell][rbi][i-1], round(1/6, 3)))
+    #             res.append(resu)
+    #
+    #         phi[rb].append(res)
+    #
+    #         # phi[rb].append([[(i, 0.166) for i in user[cell][rbi]] for rbi in range(0, N_RB)])  # 频谱分配结果 {id:p}
+    #         # phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1/6))  # 频谱分配结果 {id:p}
+    #         #
     return phi
-
+# phi [cell][rb][k]
 def balanceO(phi, SINR_mtx, cell):
     total = SINR_mtx.sum(axis=1)
     row1, row2 = total.argmax(), total.argmin()
@@ -212,8 +276,8 @@ def balanceO(phi, SINR_mtx, cell):
     # row2 = np.array([total[i] for i in range(0, len(total)) if i != row1]).argmin()  # rb
     col1 = np.argmax(SINR_mtx[row1])
     col2 = np.argmin(SINR_mtx[row2])
-    phi[row1][cell][row1][col1], phi[row2][cell][row2][col2] = (phi[row2][cell][row2][col2][0],phi[row1][cell][row1][col1][1]), \
-                                                               (phi[row1][cell][row1][col1][0],phi[row2][cell][row2][col2][1])
+    phi[cell][row1][col1], phi[cell][row2][col2] = (phi[cell][row2][col2][0],phi[cell][row1][col1][1]), \
+                                                               (phi[cell][row1][col1][0],phi[cell][row2][col2][1])
 
 
 def start():
@@ -228,6 +292,8 @@ def start():
         SINR = getSINR(phi, h)
         SINR_mtx = np.array(SINR).reshape((4, 15, 6))
 
+        best_SINR = 0.0
+        best_phi = None
         for i in range(20):
             for cell in range(0, N_cell):
                 # SINR_mtx = np.array(SINR).reshape((4, 15, 6))
@@ -244,11 +310,11 @@ def start():
                     if max_idx == min_idx:
                         min_idx = np.random.choice([i for i in range(0, N_layer) if i != max_idx])
 
-                    if phi[rb][cell][rb][max_idx][1] - 0.02 > 0:
+                    if phi[cell][rb][max_idx][1] - 0.02 > 0:
                         # phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], round(phi[rb][cell][rb][min_idx][1] + 0.01, 3))
                         # phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], round(phi[rb][cell][rb][max_idx][1] - 0.01, 3))
-                        phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], phi[rb][cell][rb][min_idx][1] + 0.01)
-                        phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], phi[rb][cell][rb][max_idx][1] - 0.01)
+                        phi[cell][rb][min_idx] = (phi[cell][rb][min_idx][0], phi[cell][rb][min_idx][1] + 0.02)
+                        phi[cell][rb][max_idx] = (phi[cell][rb][max_idx][0], phi[cell][rb][max_idx][1] - 0.02)
 
 
             SINR = getSINR(phi, h)
@@ -256,12 +322,16 @@ def start():
 
             min = np.min(SINR_mtx)
             print(min)
+            if min > best_SINR:
+                best_SINR = min
+                best_phi = phi
+                print("best_SINR : " + str(best_SINR))
+            # print(min)
 
-        for i in range(15):
-            print(phi[i][0][i])
+        print("================ sample_" + str(sample_id) + " end  ================")
         # break
 
-        result.append(phi)
+        result.append(best_phi)
 
     writeResult(result)
     end = time.time()
