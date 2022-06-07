@@ -1,3 +1,4 @@
+import copy
 import time
 
 # import numpy as np
@@ -21,6 +22,7 @@ def my_dot(arrA, arrB, bit=32):
     for i in range(0, arrB.shape[0]):
         arrB[i] = np.round(arrB[i].real, bit) + 1j*np.round(arrB[i].imag, bit)
     return np.dot(np.array(arrA), np.array(arrB))
+
 
 def readSample(line_count=sample_n_row * N_sample, file=input_file):
     global readSize
@@ -76,11 +78,11 @@ def readChannel(sample, rb_num=N_RB, cell_num=N_cell, ue_num=N_UE, tx_num=N_TX):
 def generateChMtx(sample_all, sample_id):  # 生成样例的信道矩阵
     cur = time.time()
     read_sample = sample_all[(sample_id - 1) * sample_n_row: sample_id * sample_n_row]
-    print("read_sample shape :" + str(read_sample.shape))
+    # print("read_sample shape :" + str(read_sample.shape))
     sample = readChannel(read_sample)  # 行：360个用户，4个小区，15条信道；列：64*4条信道
-    print("sample shape :" + str(sample.shape))
+    # print("sample shape :" + str(sample.shape))
     end = time.time()
-    print("ReadTime : " + str(end - cur))
+    # print("ReadTime : " + str(end - cur))
     #   RB数：1 <= m <= 15    小区数：1 <= n <= 4  四个小区的所有RB， 用户数：1 <= k <= 90
     #  h : 某个用户接收64个信道的信道系数，是个1*64的向量（也就是一个小区范围内），sample一行有4个小区的h
     #  w ：信道分配给用户k的加权系数矢量 64 * 1
@@ -236,13 +238,14 @@ def init():
             phi[cell].append([])
             resu = []
             # alc = [round(((1 - 0.005) * np.random.random() + 0.005), 3) for i in range(0, 5)] #random.random()生成[0,1)区间
-            alc = [((1 - 0.005) * np.random.random() + 0.005) for i in range(0, 5)]  # random.random()生成[0,1)区间
+            # alc = [((1 - 0.005) * np.random.random() + 0.005) for i in range(0, 5)]  # random.random()生成[0,1)区间
+            alc = [round(np.random.random(), 4) for i in range(0, 5)]  # random.random()生成[0,1)区间
             alc.append(0)
             alc = sorted(alc)
             alc.append(1)
             for i in range(1, 7):
-                # resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1] + 0.001, 3)))
-                resu.append((user[cell][rb][i - 1], round(1 / 6, 4)))
+                # resu.append((user[cell][rb][i-1], round(alc[i] - alc[i-1] + 0.001, 4)))
+                resu.append((user[cell][rb][i - 1], round(0.1666, 4)))
 
             phi[cell][rb] = resu
 
@@ -276,8 +279,8 @@ def balanceO(phi, SINR_mtx, cell):
     # row2 = np.array([total[i] for i in range(0, len(total)) if i != row1]).argmin()  # rb
     col1 = np.argmax(SINR_mtx[row1])
     col2 = np.argmin(SINR_mtx[row2])
-    phi[cell][row1][col1], phi[cell][row2][col2] = (phi[cell][row2][col2][0],phi[cell][row1][col1][1]), \
-                                                               (phi[cell][row1][col1][0],phi[cell][row2][col2][1])
+    phi[cell][row1][col1], phi[cell][row2][col2] = (phi[cell][row2][col2][0], phi[cell][row1][col1][1]), \
+                                                   (phi[cell][row1][col1][0], phi[cell][row2][col2][1])
 
 
 def start():
@@ -291,17 +294,28 @@ def start():
         phi = init()
         SINR = getSINR(phi, h)
         SINR_mtx = np.array(SINR).reshape((4, 15, 6))
-
+        # phi[0][0][2], phi[0][1][2] = phi[0][1][2], phi[0][0][2]
+        # phi[0][0][1], phi[0][0][2] = (phi[0][0][1][0], phi[0][0][1][1] + 0.3), (phi[0][0][2][0], phi[0][0][2][1] - 0.3)
+        # phi[0][1][2], phi[0][1][3] = (phi[0][1][2][0], phi[0][1][2][1] - 0.3), (phi[0][1][3][0], phi[0][1][3][1] + 0.3)
         best_SINR = 0.0
         best_phi = None
         for i in range(20):
-            for cell in range(0, N_cell):
-                # SINR_mtx = np.array(SINR).reshape((4, 15, 6))
-                # min = np.min(SINR_mtx[0][0])
-                # print(min)
-                balanceO(phi, SINR_mtx[cell], cell)
-                # SINR = getSINR(phi, h)
-                # print(phi[0][0][0])
+            min = np.min(SINR)
+            print(min)
+            if min > best_SINR:
+                best_SINR = min
+                best_phi = copy.deepcopy(phi)
+                print("best_SINR : " + str(best_SINR))
+                # print(best_phi)
+
+            for cycle in range(30):
+                for cell in range(0, N_cell):
+                    # SINR_mtx = np.array(SINR).reshape((4, 15, 6))
+                    # min = np.min(SINR_mtx[0][0])
+                    # print(min)
+                    balanceO(phi, SINR_mtx[cell], cell)
+                    # SINR = getSINR(phi, h)
+                    # print(phi[0][0][0])
 
             for cell in range(0, N_cell):
                 for rb in range(0, N_RB):
@@ -320,20 +334,16 @@ def start():
             SINR = getSINR(phi, h)
             SINR_mtx = np.array(SINR).reshape((4, 15, 6))
 
-            min = np.min(SINR_mtx)
-            print(min)
-            if min > best_SINR:
-                best_SINR = min
-                best_phi = phi
-                print("best_SINR : " + str(best_SINR))
-            # print(min)
-
         print("================ sample_" + str(sample_id) + " end  ================")
         # break
 
         result.append(best_phi)
 
+    for i in range(0, len(result)):
+        SINR = getSINR(result[i], generateChMtx(sample_all, i+1))
+        print(str(i+1) + "   " + str(np.min(SINR)))
     writeResult(result)
     end = time.time()
     print("total time: " ,end - beg)
+
 start()

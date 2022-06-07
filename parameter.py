@@ -2,7 +2,7 @@ import numpy as np
 
 root_dir = "./"
 # 输出文件格式
-index = 0
+index = 2
 RealTeamID = "hw16273433"
 OutputResultFileName = root_dir + "Result_{}_{}.csv".format(index, RealTeamID)
 # 输入文件格式
