@@ -46,7 +46,7 @@ def readSample(line_count=sample_n_row * N_sample, file=input_file):
 
 def writeResult(result):
     with open(OutputResultFileName, mode='w', encoding='utf-8') as file:
-        # file.truncate()
+        file.truncate()
         for sample_id in range(0, N_sample):
             phi = result[sample_id]
             #  write 60 row
@@ -248,28 +248,6 @@ def init():
                 resu.append((user[cell][rb][i - 1], round(0.1666, 4)))
 
             phi[cell][rb] = resu
-
-    # for rb in range(0, N_RB):
-    #     phi.append([])
-    #     for cell in range(0, N_cell):
-    #         res = []
-    #         for rbi in range(0, N_RB):
-    #             resu = []
-    #             # alc = [round(((1 - 0.005) * np.random.random() + 0.005), 3) for i in range(0, 5)] #random.random()生成[0,1)区间
-    #             alc = [((1 - 0.005) * np.random.random() + 0.005) for i in range(0, 5)]  # random.random()生成[0,1)区间
-    #             alc.append(0)
-    #             alc = sorted(alc)
-    #             alc.append(1)
-    #             for i in range(1, 7):
-    #                 # resu.append((user[cell][rbi][i-1], round(alc[i] - alc[i-1] + 0.001, 3)))
-    #                 resu.append((user[cell][rbi][i-1], round(1/6, 3)))
-    #             res.append(resu)
-    #
-    #         phi[rb].append(res)
-    #
-    #         # phi[rb].append([[(i, 0.166) for i in user[cell][rbi]] for rbi in range(0, N_RB)])  # 频谱分配结果 {id:p}
-    #         # phi[rb].append(dict.fromkeys(range(rb * 6, rb * 6 + 6), 1/6))  # 频谱分配结果 {id:p}
-    #         #
     return phi
 # phi [cell][rb][k]
 def balanceO(phi, SINR_mtx, cell):
@@ -283,58 +261,115 @@ def balanceO(phi, SINR_mtx, cell):
                                                    (phi[cell][row1][col1][0], phi[cell][row2][col2][1])
 
 
+def balance(phi, SINR_mtx, h, baseline):
+    best_SINR = baseline
+    best_phi = copy.deepcopy(phi)
+    swap_pos_list = []
+    for cell in range(0, N_cell):
+        swap_seq = []
+        rb_pos = [i for i in range(N_RB)]
+        np.random.shuffle(rb_pos)
+        for i in range(0, N_RB - 1, 2):
+            row1, row2 = rb_pos[i], rb_pos[i + 1]
+            col1, col2 = np.argmin(SINR_mtx[cell][row1]), np.argmin(SINR_mtx[cell][row2])
+            phi[cell][row1][col1], phi[cell][row2][col2] = (phi[cell][row2][col2][0], phi[cell][row1][col1][1]), \
+                                                           (phi[cell][row1][col1][0], phi[cell][row2][col2][1])
+            swap_seq.append((row1, col1))
+            swap_seq.append((row2, col2))
+        swap_pos_list.append(swap_seq)
+    SINR_mtx = np.array(getSINR(phi, h)).reshape((4, 15, 6))
+    for cell in range(0, N_cell):
+        for j in range(0, N_RB - 1, 2):
+            row1, row2 = swap_pos_list[cell][j][0], swap_pos_list[cell][j + 1][0]
+            if np.array(SINR_mtx[cell][row1]).min() < best_SINR or np.array(SINR_mtx[cell][row2]).min() < best_SINR:
+                col1, col2 = swap_pos_list[cell][j][1], swap_pos_list[cell][j + 1][1]
+                phi[cell][row1][col1], phi[cell][row2][col2] = (phi[cell][row2][col2][0],
+                                                                phi[cell][row1][col1][1]), \
+                                                               (phi[cell][row1][col1][0],
+                                                                phi[cell][row2][col2][1])
+
+    SINR_mtx = np.array(getSINR(phi, h)).reshape((4, 15, 6))
+    min_sinr = np.min(SINR_mtx)
+    if min_sinr > best_SINR:
+        best_SINR = np.min(SINR_mtx)
+        best_phi = copy.deepcopy(phi)
+    return best_SINR, best_phi
+
+
+def balance1(phi, SINR_mtx, h, baseline):
+    best_phi = copy.deepcopy(phi)
+    best_SINR = baseline
+    for cell in range(0, N_cell):
+        before = np.array(phi[cell], dtype='i,f').reshape(N_UE)
+        np.random.shuffle(before)
+        phi[cell] = np.array(before).reshape(N_RB, N_layer)
+
+    SINR_mtx = np.array(getSINR(phi, h)).reshape((4, 15, 6))
+    min_sinr = np.min(SINR_mtx)
+    if min_sinr > best_SINR:
+        best_SINR = min_sinr
+        best_phi = copy.deepcopy(phi)
+    return best_SINR, best_phi
+
+def integer(num, default=1000000):
+    return round(int(num * default) / default, 6)
+
+
+
 def start():
     beg = time.time()
     # sample[(cell-1)*90] ~ sample[cell*90-1]
     result = []  # 10 * phi
     sample_all = readSample()
     for sample_id in range(1, N_sample + 1):
+        sample_beg = time.time()
         h = generateChMtx(sample_all, sample_id)
-
         phi = init()
-        SINR = getSINR(phi, h)
-        SINR_mtx = np.array(SINR).reshape((4, 15, 6))
+        SINR_mtx = np.array(getSINR(phi, h)).reshape((4, 15, 6))
         # phi[0][0][2], phi[0][1][2] = phi[0][1][2], phi[0][0][2]
         # phi[0][0][1], phi[0][0][2] = (phi[0][0][1][0], phi[0][0][1][1] + 0.3), (phi[0][0][2][0], phi[0][0][2][1] - 0.3)
         # phi[0][1][2], phi[0][1][3] = (phi[0][1][2][0], phi[0][1][2][1] - 0.3), (phi[0][1][3][0], phi[0][1][3][1] + 0.3)
-        best_SINR = 0.0
-        best_phi = None
-        for i in range(20):
-            min = np.min(SINR)
-            print(min)
-            if min > best_SINR:
-                best_SINR = min
-                best_phi = copy.deepcopy(phi)
-                print("best_SINR : " + str(best_SINR))
-                # print(best_phi)
-
-            for cycle in range(30):
-                for cell in range(0, N_cell):
-                    # SINR_mtx = np.array(SINR).reshape((4, 15, 6))
-                    # min = np.min(SINR_mtx[0][0])
-                    # print(min)
-                    balanceO(phi, SINR_mtx[cell], cell)
-                    # SINR = getSINR(phi, h)
-                    # print(phi[0][0][0])
-
+        best_SINR = np.min(SINR_mtx)
+        best_phi = copy.deepcopy(phi)
+        for t in range(0, 5):
+            for p in range(2):
+                best_SINR, best_phi = balance1(best_phi, SINR_mtx, h, best_SINR)
+                print("-----random choose best allocate： " + str(best_SINR))
+            for cycle in range(8):
+                best_SINR, best_phi = balance(best_phi, SINR_mtx, h, best_SINR)
+                print("-----average choose best allocate： " + str(best_SINR))
+        for i in range(25):
+            allo_pos_list = []
             for cell in range(0, N_cell):
+                allo_pos_list.append([])
                 for rb in range(0, N_RB):
+                    allo_pos = []
                     max_idx = np.argmax(SINR_mtx[cell][rb])
                     min_idx = np.argmin(SINR_mtx[cell][rb])
                     if max_idx == min_idx:
-                        min_idx = np.random.choice([i for i in range(0, N_layer) if i != max_idx])
+                        min_idx = np.random.choice([j for j in range(0, N_layer) if j != max_idx])
 
                     if phi[cell][rb][max_idx][1] - 0.02 > 0:
                         # phi[rb][cell][rb][min_idx] = (phi[rb][cell][rb][min_idx][0], round(phi[rb][cell][rb][min_idx][1] + 0.01, 3))
                         # phi[rb][cell][rb][max_idx] = (phi[rb][cell][rb][max_idx][0], round(phi[rb][cell][rb][max_idx][1] - 0.01, 3))
-                        phi[cell][rb][min_idx] = (phi[cell][rb][min_idx][0], phi[cell][rb][min_idx][1] + 0.02)
-                        phi[cell][rb][max_idx] = (phi[cell][rb][max_idx][0], phi[cell][rb][max_idx][1] - 0.02)
+                        phi[cell][rb][min_idx] = (phi[cell][rb][min_idx][0], integer(phi[cell][rb][min_idx][1] + 0.02))
+                        phi[cell][rb][max_idx] = (phi[cell][rb][max_idx][0], integer(phi[cell][rb][max_idx][1] - 0.02))
 
+                        allo_pos.append((min_idx, max_idx))
 
-            SINR = getSINR(phi, h)
-            SINR_mtx = np.array(SINR).reshape((4, 15, 6))
+            SINR_mtx = np.array(getSINR(phi, h)).reshape((4, 15, 6))
+            min = np.min(SINR_mtx)
+            # for cell in range(0, N_cell):
+            #     for rb in range(0, N_RB):
+            #         if np.array(SINR_mtx[cell][rb]).min() < best_SINR:
+            #             allo_pos_list
 
-        print("================ sample_" + str(sample_id) + " end  ================")
+            if min > best_SINR:
+                best_SINR = min
+                best_phi = copy.deepcopy(phi)
+            print("-----choose best P： " + str(best_SINR))
+        sample_end = time.time()
+        print("================ sample_" + str(sample_id) + " end, 耗时： " + str(sample_end - sample_beg) + "  ================")
         # break
 
         result.append(best_phi)
